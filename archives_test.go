@@ -5,7 +5,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,7 +21,7 @@ import (
 func collect(t *testing.T, path string, opts Options) map[string]string {
 	t.Helper()
 	got := map[string]string{}
-	err := Walk(path, opts, func(p string, r io.Reader) error {
+	err := Walk(context.Background(), path, opts, func(_ context.Context, p string, r io.Reader) error {
 		data, err := io.ReadAll(r)
 		if err != nil {
 			return err
@@ -178,7 +181,7 @@ func TestMaxBytesBudget(t *testing.T) {
 	path := writeTemp(t, "big.gz", gz(t, big))
 
 	var total int
-	err := Walk(path, Options{MaxBytes: 4096}, func(_ string, r io.Reader) error {
+	err := Walk(context.Background(), path, Options{MaxBytes: 4096}, func(_ context.Context, _ string, r io.Reader) error {
 		n, _ := io.Copy(io.Discard, r)
 		total += int(n)
 		return nil
@@ -206,6 +209,105 @@ func TestIsArchiveName(t *testing.T) {
 	}
 }
 
+func TestWalkCancelBeforeStart(t *testing.T) {
+	z := makeZip(t, map[string]string{"a.txt": "alpha"})
+	path := writeTemp(t, "test.zip", z)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	called := false
+	err := Walk(ctx, path, Options{}, func(_ context.Context, _ string, _ io.Reader) error {
+		called = true
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
+	if called {
+		t.Error("fn should not be invoked when ctx is already cancelled")
+	}
+}
+
+func TestWalkCancelFromCallback(t *testing.T) {
+	// Multi-member tar; the callback cancels after the first leaf, so the walk
+	// must stop before visiting the rest.
+	tarball := makeTar(t, map[string]string{"a.txt": "a", "b.txt": "b", "c.txt": "c"})
+	path := writeTemp(t, "multi.tar", tarball)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	count := 0
+	err := Walk(ctx, path, Options{}, func(_ context.Context, _ string, _ io.Reader) error {
+		count++
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
+	if count != 1 {
+		t.Errorf("visited %d leaves, want 1 before cancellation stopped the walk", count)
+	}
+}
+
+func TestWalkCancelMidStream(t *testing.T) {
+	// A gzip leaf that decompresses to 1 MiB. The callback reads a little, then
+	// cancels and keeps reading: the ctxReader must abort the long single read.
+	big := bytes.Repeat([]byte("A"), 1<<20)
+	path := writeTemp(t, "big.gz", gz(t, big))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err := Walk(ctx, path, Options{MaxBytes: -1}, func(_ context.Context, _ string, r io.Reader) error {
+		if _, err := io.ReadFull(r, make([]byte, 4096)); err != nil {
+			return err
+		}
+		cancel()
+		_, err := io.Copy(io.Discard, r)
+		return err
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
+}
+
+func TestLoggerReceivesWarnings(t *testing.T) {
+	// A gzip member decompressing past the budget triggers a graceful stop that
+	// is reported via the configured Logger rather than written to stderr.
+	big := bytes.Repeat([]byte("A"), 1<<20)
+	path := writeTemp(t, "big.gz", gz(t, big))
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	// Propagating the read error surfaces the exhausted budget to Walk, which
+	// recovers it as a graceful (nil) stop and reports it via the logger.
+	err := Walk(context.Background(), path, Options{MaxBytes: 4096, Logger: logger}, func(_ context.Context, _ string, r io.Reader) error {
+		_, err := io.Copy(io.Discard, r)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Walk error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "budget") {
+		t.Errorf("expected a budget warning in the log, got %q", buf.String())
+	}
+}
+
+func TestNilLoggerIsSilent(t *testing.T) {
+	// With no Logger configured (the default), hitting the warn path must not
+	// panic and the walk still recovers gracefully.
+	big := bytes.Repeat([]byte("A"), 1<<20)
+	path := writeTemp(t, "big.gz", gz(t, big))
+
+	err := Walk(context.Background(), path, Options{MaxBytes: 4096}, func(_ context.Context, _ string, r io.Reader) error {
+		_, err := io.Copy(io.Discard, r)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Walk error: %v", err)
+	}
+}
+
 func keys(m map[string]string) []string {
 	ks := make([]string, 0, len(m))
 	for k := range m {
@@ -224,7 +326,7 @@ func FuzzWalkStream(f *testing.F) {
 		path := writeTemp(t, "fuzz.bin", data)
 		// Must never panic; errors are acceptable. Bound the budget so fuzzed
 		// bombs cannot run away.
-		_ = Walk(path, Options{MaxBytes: 1 << 20, MaxDepth: 4}, func(_ string, r io.Reader) error {
+		_ = Walk(context.Background(), path, Options{MaxBytes: 1 << 20, MaxDepth: 4}, func(_ context.Context, _ string, r io.Reader) error {
 			_, _ = io.Copy(io.Discard, r)
 			return nil
 		})

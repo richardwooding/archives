@@ -2,10 +2,9 @@ package archives
 
 import (
 	"bufio"
+	"context"
 	"errors"
-	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -23,36 +22,43 @@ const arHeaderSize = 60
 //
 // The ar container is uncompressed, so it reads directly from br without
 // budgeting; compressed members (e.g. data.tar.xz) are budgeted downstream.
-func walkAr(name string, br *bufio.Reader, depth int, opts Options, b *budget, fn WalkFunc) error {
+func walkAr(ctx context.Context, name string, br *bufio.Reader, depth int, opts Options, b *budget, fn WalkFunc) error {
 	magic := make([]byte, len(arMagic))
 	if _, err := io.ReadFull(br, magic); err != nil || string(magic) != arMagic {
-		fmt.Fprintf(os.Stderr, "txtr: %s: not a valid ar archive\n", name)
+		opts.warn("not a valid ar archive", "path", name)
 		return nil
 	}
 
 	hdr := make([]byte, arHeaderSize)
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		_, err := io.ReadFull(br, hdr)
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "txtr: %s: ar header read error: %v\n", name, err)
+			if ctx.Err() != nil {
+				return err
+			}
+			opts.warn("ar header read error", "path", name, "err", err)
 			return nil
 		}
 
 		member := strings.TrimSuffix(strings.TrimRight(string(hdr[0:16]), " "), "/")
 		size, err := strconv.ParseInt(strings.TrimSpace(string(hdr[48:58])), 10, 64)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "txtr: %s: invalid ar member size: %v\n", name, err)
+			opts.warn("invalid ar member size", "path", name, "err", err)
 			return nil
 		}
 
 		// Bound the member to its declared size, recurse, then drain whatever
-		// the walker left unread so the next header is correctly aligned.
-		limited := bufio.NewReaderSize(io.LimitReader(br, size), peekSize)
+		// the walker left unread so the next header is correctly aligned. The
+		// ctxReader makes both the recursion and the drain cancellable.
+		limited := bufio.NewReaderSize(&ctxReader{ctx: ctx, r: io.LimitReader(br, size)}, peekSize)
 		child := name + PathSeparator + cleanMemberName(member)
-		walkErr := walkStream(child, limited, depth+1, opts, b, fn)
+		walkErr := walkStream(ctx, child, limited, depth+1, opts, b, fn)
 		if _, derr := io.Copy(io.Discard, limited); derr != nil && !errors.Is(derr, errBudgetExceeded) {
 			return derr
 		}
