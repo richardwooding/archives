@@ -27,6 +27,7 @@ go get github.com/richardwooding/archives
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -34,7 +35,8 @@ import (
 )
 
 func main() {
-	err := archives.Walk("pkg.deb", archives.Options{}, func(path string, r io.Reader) error {
+	ctx := context.Background()
+	err := archives.Walk(ctx, "pkg.deb", archives.Options{}, func(ctx context.Context, path string, r io.Reader) error {
 		n, _ := io.Copy(io.Discard, r)
 		fmt.Printf("%-60s %d bytes\n", path, n)
 		// pkg.deb!/data.tar!/usr/bin/htop   123456 bytes
@@ -51,13 +53,29 @@ per **leaf** file with a virtual path (using `!/` to separate nesting levels) an
 decompressed contents. A non-archive file is emitted as a single leaf at its own path, so callers
 can use `Walk` uniformly without checking the type first.
 
+## Cancellation
+
+`Walk` takes a `context.Context` and observes cancellation both between members and mid-stream
+during long reads. When the context is cancelled (or its deadline expires), `Walk` stops and returns
+`ctx.Err()` (`context.Canceled` / `context.DeadlineExceeded`). The same context is passed to the
+callback so it can honor cancellation in its own work.
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+err := archives.Walk(ctx, path, archives.Options{}, func(ctx context.Context, path string, r io.Reader) error {
+	return store(ctx, path, r) // cancellation propagates into downstream work
+})
+```
+
 ## Safety
 
 Untrusted archives can be hostile (decompression bombs, deeply nested containers). `Walk` is bounded
 by `Options`:
 
 ```go
-archives.Walk(path, archives.Options{
+archives.Walk(ctx, path, archives.Options{
 	MaxDepth: 8,                 // max nesting; deeper members are emitted as opaque leaves
 	MaxBytes: 2 << 30,           // max total decompressed bytes per input (<0 = unlimited)
 }, fn)
@@ -65,6 +83,19 @@ archives.Walk(path, archives.Options{
 
 Zero values use the defaults (`DefaultMaxDepth` = 8, `DefaultMaxBytes` = 2 GiB). When the byte
 budget is exhausted, the walk stops gracefully rather than erroring.
+
+## Diagnostics
+
+Non-fatal anomalies — an unreadable member, a malformed sub-archive, the byte budget being hit —
+are recovered (the walk skips the member, scans the raw bytes, or stops gracefully) and reported
+through an optional `*slog.Logger`. The library is **silent by default**: a nil `Logger` discards
+these warnings, and they are never written to stderr.
+
+```go
+archives.Walk(ctx, path, archives.Options{
+	Logger: slog.Default(), // opt in to non-fatal walk warnings
+}, fn)
+```
 
 ## Design
 
