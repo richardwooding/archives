@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>archives — walk every file inside an archive, in Go</title>
+<meta name="description" content="A pure-Go library that streams every file inside an archive — APK, .deb, firmware.tar.gz and more — descending through nested containers automatically, with decompression-bomb guards.">
+<meta property="og:title" content="archives">
+<meta property="og:description" content="Stream an io.Reader for every file inside an archive, descending through nested containers automatically. Pure Go, no cgo.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='%23161b22'/><rect x='5' y='12' width='3.5' height='7' rx='1' fill='%23a371f7'/><rect x='10.25' y='8' width='3.5' height='11' rx='1' fill='%23bd93ff'/><rect x='15.5' y='4' width='3.5' height='15' rx='1' fill='%23d2b3ff'/></svg>">
+<script>try{var t=localStorage.getItem("gl-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="gloam.css">
+</head>
+<body class="gl">
+<a class="gl-skip" href="#main">Skip to content</a>
+
+<header class="gl-nav">
+  <div class="gl-wrap">
+    <span class="gl-brand">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+        <rect width="24" height="24" rx="6" fill="var(--gl-panel-2)"/>
+        <rect x="5" y="12" width="3.5" height="7" rx="1" fill="var(--gl-accent)"/>
+        <rect x="10.25" y="8" width="3.5" height="11" rx="1" fill="var(--gl-accent-2)"/>
+        <rect x="15.5" y="4" width="3.5" height="15" rx="1" fill="#d2b3ff"/>
+      </svg>
+      archives
+    </span>
+    <button class="gl-nav-toggle" aria-label="Toggle navigation" data-gl-nav-toggle="nav" aria-expanded="false">☰</button>
+    <nav id="nav">
+      <a href="#features">Features</a>
+      <a href="#usage">Usage</a>
+      <a href="#install">Install</a>
+      <button class="gl-theme-toggle" data-gl-theme-toggle aria-label="Toggle color theme" aria-pressed="true">
+        <svg class="gl-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="gl-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>
+      </button>
+      <a class="gl-btn ghost" href="https://github.com/richardwooding/archives">GitHub ★</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="gl-hero">
+    <div class="gl-wrap gl-hero-grid">
+      <div>
+        <p class="gl-eyebrow">go · streaming · no cgo</p>
+        <h1>Walk every file <span class="gl-grad">inside an archive.</span></h1>
+        <p class="sub">Point it at an APK, a <code>.deb</code>, or a <code>firmware.tar.gz</code> and get an <code>io.Reader</code> for every contained file — descending through nested containers automatically, with decompression-bomb guards.</p>
+        <div class="gl-cta">
+          <a class="gl-btn primary" href="#install">Install</a>
+          <a class="gl-btn ghost" href="https://pkg.go.dev/github.com/richardwooding/archives">Go Reference</a>
+        </div>
+        <p class="gl-hint">MIT licensed · pure Go, no cgo · descends nested containers</p>
+      </div>
+      <div class="gl-term">
+        <div class="bar">
+          <span class="dot" style="background:#ff5f56"></span>
+          <span class="dot" style="background:#ffbd2e"></span>
+          <span class="dot" style="background:#27c93f"></span>
+          <span class="t">archives.go</span>
+        </div>
+<pre><span class="n">archives</span>.Walk(ctx, <span class="ok">"pkg.deb"</span>, archives.Options{},
+  func(ctx context.Context, path <span class="n">string</span>, r io.Reader) <span class="n">error</span> {
+    n, _ := io.Copy(io.Discard, r)
+    fmt.Printf(<span class="ok">"%-32s %d bytes\n"</span>, path, n)
+    <span class="hd">// pkg.deb!/data.tar!/usr/bin/htop  123456 bytes</span>
+    <span class="n">return</span> nil
+  })</pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="gl-section" id="features">
+    <div class="gl-wrap">
+      <p class="gl-eyebrow">what you get</p>
+      <h2>Every leaf, streamed and bounded.</h2>
+      <p class="gl-lede" style="margin-top:14px">One recursive walker that descends into nested containers, hands you each file as a stream, and refuses to be blown up by hostile input.</p>
+      <div class="gl-grid feat" style="margin-top:32px">
+
+        <div class="gl-card">
+          <h3><span class="gl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg></span>Streaming</h3>
+          <p>Files are handed to your callback as <code>io.Reader</code>s; the whole archive is never loaded into memory.</p>
+        </div>
+
+        <div class="gl-card">
+          <h3><span class="gl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v6a3 3 0 0 0 3 3h6M6 9h.01M15 9l3 3-3 3M12 12v6a3 3 0 0 0 3 3h3"/></svg></span>Recurses automatically</h3>
+          <p>Descends nested containers — <code>ar → tar.xz → ELF</code>, <code>zip → dex</code> — down to every leaf.</p>
+        </div>
+
+        <div class="gl-card">
+          <h3><span class="gl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10M18 18l3-3M18 18l3 3"/></svg></span>Virtual paths</h3>
+          <p>Each leaf gets a <code>!/</code>-separated path so you can locate findings deep inside nested containers.</p>
+        </div>
+
+        <div class="gl-card">
+          <h3><span class="gl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>Magic-byte detection</h3>
+          <p>Format is detected from content, not extension; non-archives simply emit as a single leaf.</p>
+        </div>
+
+        <div class="gl-card">
+          <h3><span class="gl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></span>Bomb-guarded</h3>
+          <p><code>MaxDepth</code> (8) and <code>MaxBytes</code> (2&nbsp;GiB) bound untrusted input; it stops gracefully, not with an error.</p>
+        </div>
+
+        <div class="gl-card">
+          <h3><span class="gl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></span>Pure Go</h3>
+          <p>Stdlib plus pure-Go zstd/xz decoders, no cgo; context cancellation is observed mid-stream.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="gl-section" id="usage">
+    <div class="gl-wrap">
+      <p class="gl-eyebrow">usage</p>
+      <h2>Basic walk, or bounded and instrumented.</h2>
+      <p class="gl-lede" style="margin-top:14px">Start with a zero-value <code>Options{}</code> and a callback. Opt into depth/size limits and a logger when the input is untrusted.</p>
+      <div class="gl-split" style="margin-top:28px">
+<pre class="gl-code"><span class="c">// Basic — walk every leaf</span>
+err := archives.Walk(ctx, path, archives.Options{}, fn)</pre>
+<pre class="gl-code"><span class="c">// Safety + opt-in diagnostics</span>
+err := archives.Walk(ctx, path, archives.Options{
+    MaxDepth: <span class="k">8</span>,
+    MaxBytes: <span class="k">2</span> &lt;&lt; <span class="k">30</span>,
+    Logger:   slog.Default(),
+}, fn)</pre>
+      </div>
+      <ul class="gl-badges" aria-label="Supported containers" style="margin-top:26px">
+        <li class="gl-lang">zip</li>
+        <li class="gl-lang">apk</li>
+        <li class="gl-lang">jar</li>
+        <li class="gl-lang">tar</li>
+        <li class="gl-lang">gzip</li>
+        <li class="gl-lang">bzip2</li>
+        <li class="gl-lang">xz</li>
+        <li class="gl-lang">zstd</li>
+        <li class="gl-lang">deb</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="gl-section" id="install">
+    <div class="gl-wrap">
+      <p class="gl-eyebrow">install</p>
+      <h2>Add it to your module.</h2>
+      <p class="gl-lede" style="margin-top:14px">One import, pure Go, no cgo.</p>
+      <div class="gl-install" style="margin-top:26px">
+        <div class="gl-snip">
+          <span class="lbl">go get</span>
+          <code id="i1">go get github.com/richardwooding/archives</code>
+          <button class="gl-copy" data-gl-copy="i1">Copy</button>
+        </div>
+        <div class="gl-snip">
+          <span class="lbl">import</span>
+          <code id="i2">import "github.com/richardwooding/archives"</code>
+          <button class="gl-copy" data-gl-copy="i2">Copy</button>
+        </div>
+      </div>
+      <p class="gl-hint">Powers <a href="https://github.com/richardwooding/txtr">txtr</a>'s <code>--recurse</code>. Full API on the <a href="https://pkg.go.dev/github.com/richardwooding/archives">Go Reference</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="gl-footer">
+  <div class="gl-wrap">
+    <span class="gl-brand" style="font-size:.98rem">archives · MIT · <span data-gl-year></span></span>
+    <nav class="gl-fnav">
+      <a href="https://richardwooding.github.io/">Richard Wooding</a>
+      <a href="https://github.com/richardwooding/archives">GitHub</a>
+      <a href="https://pkg.go.dev/github.com/richardwooding/archives">Go Reference</a>
+      <a href="https://github.com/richardwooding/archives/blob/main/LICENSE">License</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="gloam.js" defer></script>
+</body>
+</html>
