@@ -5,6 +5,8 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/richardwooding/archives)](https://goreportcard.com/report/github.com/richardwooding/archives)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+**Website:** [richardwooding.github.io/archives](https://richardwooding.github.io/archives/)
+
 Recursively walk archive and compressed-container files in Go and get a stream for **every file
 inside**, no matter how deeply nested. Point it at an APK, a `.deb`, or a `firmware.tar.gz` and it
 hands you each contained file in turn — descending through `ar → tar.xz → ELF` or `zip → dex`
